@@ -22,9 +22,7 @@
       --unknown: #4b5563;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -49,7 +47,6 @@
       margin: 0;
       font-size: 28px;
       color: var(--primary-dark);
-      letter-spacing: 0.5px;
     }
 
     .header p {
@@ -73,9 +70,11 @@
     }
 
     @media (max-width: 700px) {
-      .grid {
-        grid-template-columns: 1fr;
-      }
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .input-wrap {
+      position: relative;
     }
 
     label {
@@ -100,30 +99,23 @@
       box-shadow: 0 0 0 3px rgba(15, 107, 143, 0.15);
     }
 
-.input-wrap {
-  position: relative;
-}
-
-.suggestions {
-  margin-top: 8px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #fff;
-  max-height: 240px;
-  overflow-y: auto;
-  display: none;
-
-  position: absolute;
-  z-index: 9999;
-  width: 100%;
-  left: 0;
-
-  box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-}
-
+    .suggestions {
+      display: none;
+      position: absolute;
+      z-index: 9999;
+      width: 100%;
+      left: 0;
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      max-height: 260px;
+      overflow-y: auto;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    }
 
     .suggestion-item {
-      padding: 10px 12px;
+      padding: 11px 12px;
       border-bottom: 1px solid #eef2f5;
       cursor: pointer;
       font-size: 14px;
@@ -138,14 +130,15 @@
     }
 
     .drug-brand {
-      font-weight: 700;
+      font-weight: 800;
       color: var(--text);
     }
 
     .drug-meta {
       color: var(--muted);
       font-size: 13px;
-      margin-top: 2px;
+      margin-top: 3px;
+      line-height: 1.4;
     }
 
     .actions {
@@ -286,35 +279,24 @@
       <p>可輸入處置代碼、商品名或成分名。資料來源：Micromedex。</p>
     </div>
 
-<div class="card">
-  <div class="grid">
+    <div class="card">
+      <div class="grid">
+        <div class="input-wrap">
+          <label for="drugInput1">藥物 1</label>
+          <input id="drugInput1" type="text"
+            placeholder="例如：vanc / Vanlyo / VANI10"
+            autocomplete="off" />
+          <div id="suggestions1" class="suggestions"></div>
+        </div>
 
-    <!-- 藥物 1 -->
-    <div class="input-wrap">
-      <label for="drugInput1">藥物 1</label>
-      <input
-        id="drugInput1"
-        type="text"
-        placeholder="例如：digoxin / Lanoxin / 處置代碼"
-        autocomplete="off"
-      />
-      <div id="suggestions1" class="suggestions"></div>
-    </div>
-
-    <!-- 藥物 2 -->
-    <div class="input-wrap">
-      <label for="drugInput2">藥物 2</label>
-      <input
-        id="drugInput2"
-        type="text"
-        placeholder="例如：furosemide / Lasix / 處置代碼"
-        autocomplete="off"
-      />
-      <div id="suggestions2" class="suggestions"></div>
-    </div>
-
-  </div>
-
+        <div class="input-wrap">
+          <label for="drugInput2">藥物 2</label>
+          <input id="drugInput2" type="text"
+            placeholder="例如：N4 / cef / 處置代碼"
+            autocomplete="off" />
+          <div id="suggestions2" class="suggestions"></div>
+        </div>
+      </div>
 
       <div class="actions">
         <button class="btn-primary" onclick="checkCompatibility()">查詢相容性</button>
@@ -322,7 +304,6 @@
       </div>
 
       <div id="status" class="status">資料載入中...</div>
-
       <div id="result" class="result"></div>
 
       <div class="alert">
@@ -338,182 +319,271 @@
     </div>
   </div>
 
-  <script>
-    const sheetId = "1D9-wx6Zq-gIEUKi0opvL6FjL_hvrD5HsNkLR-q3kXxc";
+<script>
+const sheetId = "1D9-wx6Zq-gIEUKi0opvL6FjL_hvrD5HsNkLR-q3kXxc";
+const csvUrl =
+  `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
 
-    /*
-      若你的 Google Sheet 只有一個工作表，通常這個連結可直接使用。
-      若之後有多個 sheet，建議改用 gid 版本。
-    */
-    const csvUrl =
-      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
+let rawRows = [];
+let drugIndex = [];
+let compatibilityMap = {};
+let selectedDrug1 = null;
+let selectedDrug2 = null;
+let resolvedColumns = null;
 
-    let rawRows = [];
-    let drugIndex = [];
-    let compatibilityMap = {};
-    let selectedDrug1 = null;
-    let selectedDrug2 = null;
+function clean(value) {
+  return String(value ?? "").trim();
+}
 
-    const COL = {
-      code1: "處置代碼1",
-      brand1: "Drug 1 商品名",
-      generic1: "Drug 1 成分名",
-      code2: "處置代碼2",
-      brand2: "Drug 2 商品名",
-      generic2: "Drug 2 成分名",
-      compatible: "Compatible",
-      updatedAt: "UpdatedAt",
-      source: "Source",
-      note: "Note"
+function normalizeText(value) {
+  return clean(value)
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/\s+/g, " ");
+}
+
+function normalizeKey(value) {
+  return clean(value)
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/\s+/g, "")
+    .replace(/[＿_－\-–—]/g, "")
+    .replace(/[()（）]/g, "");
+}
+
+function escapeHtml(text) {
+  return String(text || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function findColumn(headers, candidates, occurrence = 1) {
+  const normalizedHeaders = headers.map(h => ({
+    original: h,
+    normalized: normalizeKey(h)
+  }));
+
+  const normalizedCandidates = candidates.map(normalizeKey);
+
+  const matches = normalizedHeaders.filter(h =>
+    normalizedCandidates.some(c =>
+      h.normalized === c ||
+      h.normalized.includes(c) ||
+      c.includes(h.normalized)
+    )
+  );
+
+  return matches[occurrence - 1]?.original || "";
+}
+
+function resolveColumns(rows) {
+  const headers = Object.keys(rows[0] || {});
+
+  const codeCols = headers.filter(h => normalizeKey(h).includes("處置代碼"));
+  const brandCols = headers.filter(h =>
+    normalizeKey(h).includes("商品名") ||
+    normalizeKey(h).includes("brand")
+  );
+  const genericCols = headers.filter(h =>
+    normalizeKey(h).includes("成分名") ||
+    normalizeKey(h).includes("generic") ||
+    normalizeKey(h).includes("ingredient")
+  );
+
+  return {
+    code1: codeCols[0] || findColumn(headers, ["處置代碼1", "code1", "drug1code"]),
+    code2: codeCols[1] || findColumn(headers, ["處置代碼2", "code2", "drug2code"]),
+    brand1: brandCols[0] || findColumn(headers, ["Drug 1 商品名", "商品名1", "brand1"]),
+    brand2: brandCols[1] || findColumn(headers, ["Drug 2 商品名", "商品名2", "brand2"]),
+    generic1: genericCols[0] || findColumn(headers, ["Drug 1 成分名", "成分名1", "generic1"]),
+    generic2: genericCols[1] || findColumn(headers, ["Drug 2 成分名", "成分名2", "generic2"]),
+    compatible: findColumn(headers, ["Compatible", "Compatibility", "相容性", "相容"]),
+    updatedAt: findColumn(headers, ["UpdatedAt", "Updated At", "更新日期", "最後更新日期"]),
+    source: findColumn(headers, ["Source", "資料來源"]),
+    note: findColumn(headers, ["Note", "備註", "說明"])
+  };
+}
+
+async function loadData() {
+  try {
+    const response = await fetch(csvUrl + "&cacheBust=" + Date.now());
+    const csvText = await response.text();
+
+    Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => clean(h),
+      complete: function(results) {
+        rawRows = results.data;
+        resolvedColumns = resolveColumns(rawRows);
+
+        buildIndexes(rawRows);
+
+        document.getElementById("status").textContent =
+          `資料載入完成：${rawRows.length.toLocaleString()} 筆相容性資料；` +
+          `藥品索引 ${drugIndex.length.toLocaleString()} 筆`;
+
+        console.log("Resolved columns:", resolvedColumns);
+        console.log("Drug index sample:", drugIndex.slice(0, 10));
+      },
+      error: function(error) {
+        showStatusError("CSV 解析失敗：" + error.message);
+      }
+    });
+  } catch (error) {
+    showStatusError("無法讀取 Google Sheet CSV。請確認 Sheet 已開放檢視權限。");
+    console.error(error);
+  }
+}
+
+function showStatusError(message) {
+  document.getElementById("status").textContent = message;
+}
+
+function get(row, colName) {
+  return clean(row[colName]);
+}
+
+function buildIndexes(rows) {
+  const drugMap = new Map();
+  compatibilityMap = {};
+
+  rows.forEach(row => {
+    const d1 = {
+      code: get(row, resolvedColumns.code1),
+      brand: get(row, resolvedColumns.brand1),
+      generic: get(row, resolvedColumns.generic1)
     };
 
-    function normalizeText(value) {
-      return String(value || "")
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, " ");
+    const d2 = {
+      code: get(row, resolvedColumns.code2),
+      brand: get(row, resolvedColumns.brand2),
+      generic: get(row, resolvedColumns.generic2)
+    };
+
+    addDrug(drugMap, d1);
+    addDrug(drugMap, d2);
+
+    const code1 = normalizeCode(d1.code);
+    const code2 = normalizeCode(d2.code);
+
+    if (code1 && code2) {
+      const resultObj = {
+        compatible: get(row, resolvedColumns.compatible) || "無資料",
+        updatedAt: get(row, resolvedColumns.updatedAt) || "",
+        source: get(row, resolvedColumns.source) || "Micromedex",
+        note: get(row, resolvedColumns.note) || ""
+      };
+
+      compatibilityMap[makeKey(code1, code2)] = resultObj;
+      compatibilityMap[makeKey(code2, code1)] = resultObj;
     }
+  });
 
-    async function loadData() {
-      try {
-        const response = await fetch(csvUrl + "&cacheBust=" + Date.now());
-        const csvText = await response.text();
+  drugIndex = Array.from(drugMap.values());
+}
 
-        Papa.parse(csvText, {
-          header: true,
-          skipEmptyLines: true,
-          complete: function(results) {
-            rawRows = results.data;
-            buildIndexes(rawRows);
-            document.getElementById("status").textContent =
-              `資料載入完成：${rawRows.length.toLocaleString()} 筆相容性資料`;
-          },
-          error: function(error) {
-            showStatusError("CSV 解析失敗：" + error.message);
-          }
-        });
-      } catch (error) {
-        showStatusError("無法讀取 Google Sheet CSV。請確認 Sheet 已開放檢視權限。");
-        console.error(error);
-      }
-    }
+function normalizeCode(code) {
+  return clean(code).toUpperCase();
+}
 
-    function showStatusError(message) {
-      document.getElementById("status").textContent = message;
-    }
+function addDrug(map, drug) {
+  if (!drug.code && !drug.brand && !drug.generic) return;
 
-    function buildIndexes(rows) {
-      const drugMap = new Map();
-      compatibilityMap = {};
+  const key = normalizeCode(drug.code) || normalizeText(drug.brand) || normalizeText(drug.generic);
 
-      rows.forEach(row => {
-        const d1 = {
-          code: clean(row[COL.code1]),
-          brand: clean(row[COL.brand1]),
-          generic: clean(row[COL.generic1])
-        };
+  if (!map.has(key)) {
+    const aliases = buildAliases(drug);
 
-        const d2 = {
-          code: clean(row[COL.code2]),
-          brand: clean(row[COL.brand2]),
-          generic: clean(row[COL.generic2])
-        };
+    map.set(key, {
+      ...drug,
+      codeNorm: normalizeCode(drug.code),
+      aliases,
+      searchText: aliases.join(" ")
+    });
+  }
+}
 
-        addDrug(drugMap, d1);
-        addDrug(drugMap, d2);
+function buildAliases(drug) {
+  const fields = [drug.code, drug.brand, drug.generic];
+  const aliases = new Set();
 
-        if (d1.code && d2.code) {
-          const key1 = makeKey(d1.code, d2.code);
-          const key2 = makeKey(d2.code, d1.code);
+  fields.forEach(field => {
+    const raw = clean(field);
+    const norm = normalizeText(raw);
 
-          const resultObj = {
-            compatible: clean(row[COL.compatible]) || "無資料",
-            updatedAt: clean(row[COL.updatedAt]) || "",
-            source: clean(row[COL.source]) || "Micromedex",
-            note: clean(row[COL.note]) || ""
-          };
+    if (!raw) return;
 
-          compatibilityMap[key1] = resultObj;
-          compatibilityMap[key2] = resultObj;
-        }
-      });
+    aliases.add(norm);
+    aliases.add(norm.replace(/[^a-z0-9\u4e00-\u9fff]/gi, ""));
 
-      drugIndex = Array.from(drugMap.values());
-    }
+    norm.split(/[\s\/\-\(\),.;:+]+/).forEach(part => {
+      if (part) aliases.add(part);
+    });
+  });
 
-    function clean(value) {
-      return String(value || "").trim();
-    }
+  return Array.from(aliases).filter(Boolean);
+}
 
-    function addDrug(map, drug) {
-      if (!drug.code && !drug.brand && !drug.generic) return;
+function makeKey(codeA, codeB) {
+  return `${normalizeCode(codeA)}|${normalizeCode(codeB)}`;
+}
 
-      const key = drug.code || drug.brand || drug.generic;
-
-      if (!map.has(key)) {
-        map.set(key, {
-          ...drug,
-          searchText: normalizeText(
-            `${drug.code} ${drug.brand} ${drug.generic}`
-          )
-        });
-      }
-    }
-
-    function makeKey(codeA, codeB) {
-      return `${clean(codeA)}|${clean(codeB)}`;
-    }
 function levenshtein(a, b) {
-  const matrix = [];
+  a = normalizeText(a);
+  b = normalizeText(b);
 
-  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  const matrix = Array.from({ length: b.length + 1 }, () => []);
+
+  for (let i = 0; i <= b.length; i++) matrix[i][0] = i;
   for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
 
   for (let i = 1; i <= b.length; i++) {
     for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j] + 1
-        );
-      }
+      matrix[i][j] =
+        b[i - 1] === a[j - 1]
+          ? matrix[i - 1][j - 1]
+          : Math.min(
+              matrix[i - 1][j - 1] + 1,
+              matrix[i][j - 1] + 1,
+              matrix[i - 1][j] + 1
+            );
     }
   }
 
   return matrix[b.length][a.length];
 }
 
-function fuzzyScore(query, text) {
-  query = normalizeText(query);
-  text = normalizeText(text);
+function scoreAlias(query, alias) {
+  const q = normalizeText(query);
+  const a = normalizeText(alias);
 
-  if (!query || !text) return 0;
+  if (!q || !a) return 0;
 
-  if (text === query) return 100;
-  if (text.startsWith(query)) return 85;
-  if (text.includes(query)) return 70;
+  const qCompact = q.replace(/[^a-z0-9\u4e00-\u9fff]/gi, "");
+  const aCompact = a.replace(/[^a-z0-9\u4e00-\u9fff]/gi, "");
 
-  const words = text.split(/[\s\/\-\(\),]+/);
+  if (a === q) return 120;
+  if (aCompact === qCompact) return 115;
+  if (a.startsWith(q)) return 100;
+  if (aCompact.startsWith(qCompact)) return 95;
+  if (a.includes(q)) return 80;
+  if (aCompact.includes(qCompact)) return 78;
 
-  for (const word of words) {
-    if (!word) continue;
+  if (q.length >= 2 && a.startsWith(q[0])) {
+    const dist = levenshtein(q, a.slice(0, Math.max(q.length, 3)));
+    if (dist <= 1) return 65;
+  }
 
-    if (word.startsWith(query)) return 75;
-    if (word.includes(query)) return 65;
+  if (q.length >= 3) {
+    const dist = levenshtein(q, a);
+    const ratio = dist / Math.max(q.length, a.length);
 
-    const distance = levenshtein(query, word);
-    const maxLen = Math.max(query.length, word.length);
-
-    if (query.length >= 3 && distance <= 2) {
-      return Math.max(40, 60 - distance * 10);
-    }
-
-    if (query.length >= 4 && distance / maxLen <= 0.35) {
-      return 45;
-    }
+    if (dist <= 2) return 60 - dist * 8;
+    if (ratio <= 0.35) return 45;
   }
 
   return 0;
@@ -525,20 +595,12 @@ function searchDrugs(keyword) {
 
   return drugIndex
     .map(drug => {
-      const codeScore = fuzzyScore(q, drug.code);
-      const brandScore = fuzzyScore(q, drug.brand);
-      const genericScore = fuzzyScore(q, drug.generic);
-
-      const score =
-        codeScore * 1.2 +
-        brandScore * 1.1 +
-        genericScore * 1.0;
-
+      const score = Math.max(...drug.aliases.map(alias => scoreAlias(q, alias)));
       return { ...drug, score };
     })
     .filter(drug => drug.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 10);
+    .slice(0, 12);
 }
 
 function setupAutocomplete(inputId, suggestionId, drugNumber) {
@@ -551,224 +613,200 @@ function setupAutocomplete(inputId, suggestionId, drugNumber) {
     if (drugNumber === 1) selectedDrug1 = null;
     if (drugNumber === 2) selectedDrug2 = null;
 
-    if (keyword.length < 1) {
+    if (!keyword) {
       suggestionBox.style.display = "none";
       suggestionBox.innerHTML = "";
       return;
     }
 
     const matches = searchDrugs(keyword);
-
-    if (matches.length === 0) {
-      suggestionBox.innerHTML = `
-        <div class="suggestion-item">
-          <div class="drug-brand">查無候選藥品</div>
-          <div class="drug-meta">請改用處置代碼、商品名或成分名片段</div>
-        </div>
-      `;
-      suggestionBox.style.display = "block";
-      return;
-    }
-
-    suggestionBox.innerHTML = matches
-      .map((drug, index) => `
-        <div class="suggestion-item" onclick="selectDrug(${drugNumber}, ${index})">
-          <div class="drug-brand">
-            ${escapeHtml(drug.brand || "未列商品名")}
-          </div>
-          <div class="drug-meta">
-            成分：${escapeHtml(drug.generic || "未列成分名")}
-            ｜代碼：${escapeHtml(drug.code || "-")}
-          </div>
-        </div>
-      `)
-      .join("");
-
-    suggestionBox.dataset.matches = JSON.stringify(matches);
-    suggestionBox.style.display = "block";
+    renderSuggestions(suggestionBox, matches, drugNumber);
   });
 
   input.addEventListener("focus", () => {
-    if (input.value.trim().length > 0) {
+    if (input.value.trim()) {
       input.dispatchEvent(new Event("input"));
     }
   });
 }
 
-    function selectDrug(drugNumber, index) {
-      const suggestionBox = document.getElementById(
-        drugNumber === 1 ? "suggestions1" : "suggestions2"
-      );
+function renderSuggestions(suggestionBox, matches, drugNumber) {
+  if (matches.length === 0) {
+    suggestionBox.innerHTML = `
+      <div class="suggestion-item">
+        <div class="drug-brand">查無候選藥品</div>
+        <div class="drug-meta">請改用處置代碼、商品名或成分名片段</div>
+      </div>
+    `;
+    suggestionBox.style.display = "block";
+    return;
+  }
 
-      const matches = JSON.parse(suggestionBox.dataset.matches || "[]");
-      const drug = matches[index];
+  suggestionBox.dataset.matches = JSON.stringify(matches);
 
-      if (!drug) return;
+  suggestionBox.innerHTML = matches.map((drug, index) => `
+    <div class="suggestion-item" onclick="selectDrug(${drugNumber}, ${index})">
+      <div class="drug-brand">${escapeHtml(drug.brand || "未列商品名")}</div>
+      <div class="drug-meta">
+        成分：${escapeHtml(drug.generic || "未列成分名")}
+        ｜代碼：${escapeHtml(drug.code || "-")}
+      </div>
+    </div>
+  `).join("");
 
-      if (drugNumber === 1) {
-        selectedDrug1 = drug;
-        document.getElementById("drugInput1").value =
-          `${drug.brand} (${drug.generic})`;
-        document.getElementById("suggestions1").style.display = "none";
-      } else {
-        selectedDrug2 = drug;
-        document.getElementById("drugInput2").value =
-          `${drug.brand} (${drug.generic})`;
-        document.getElementById("suggestions2").style.display = "none";
-      }
-    }
+  suggestionBox.style.display = "block";
+}
 
-    function checkCompatibility() {
-      const resultDiv = document.getElementById("result");
+function selectDrug(drugNumber, index) {
+  const suggestionBox = document.getElementById(
+    drugNumber === 1 ? "suggestions1" : "suggestions2"
+  );
 
-      if (!selectedDrug1) {
-        const matches = searchDrugs(document.getElementById("drugInput1").value);
-        selectedDrug1 = matches[0] || null;
-      }
+  const matches = JSON.parse(suggestionBox.dataset.matches || "[]");
+  const drug = matches[index];
 
-      if (!selectedDrug2) {
-        const matches = searchDrugs(document.getElementById("drugInput2").value);
-        selectedDrug2 = matches[0] || null;
-      }
+  if (!drug) return;
 
-      if (!selectedDrug1 || !selectedDrug2) {
-        resultDiv.style.display = "block";
-        resultDiv.innerHTML = renderError("請先從候選清單選擇兩個藥品。");
-        return;
-      }
+  if (drugNumber === 1) {
+    selectedDrug1 = drug;
+    document.getElementById("drugInput1").value =
+      `${drug.brand || drug.generic || drug.code}`;
+    document.getElementById("suggestions1").style.display = "none";
+  } else {
+    selectedDrug2 = drug;
+    document.getElementById("drugInput2").value =
+      `${drug.brand || drug.generic || drug.code}`;
+    document.getElementById("suggestions2").style.display = "none";
+  }
+}
 
-      const key = makeKey(selectedDrug1.code, selectedDrug2.code);
-      const record = compatibilityMap[key];
+function checkCompatibility() {
+  const resultDiv = document.getElementById("result");
 
-      if (!record) {
-        resultDiv.style.display = "block";
-        resultDiv.innerHTML = renderNoData(selectedDrug1, selectedDrug2);
-        return;
-      }
+  if (!selectedDrug1) {
+    selectedDrug1 = searchDrugs(document.getElementById("drugInput1").value)[0] || null;
+  }
 
-      resultDiv.style.display = "block";
-      resultDiv.innerHTML = renderResult(selectedDrug1, selectedDrug2, record);
-    }
+  if (!selectedDrug2) {
+    selectedDrug2 = searchDrugs(document.getElementById("drugInput2").value)[0] || null;
+  }
 
-    function renderResult(d1, d2, record) {
-      const badgeClass = getBadgeClass(record.compatible);
+  if (!selectedDrug1 || !selectedDrug2) {
+    resultDiv.style.display = "block";
+    resultDiv.innerHTML = renderError("請先輸入並選擇兩個藥品。");
+    return;
+  }
 
-      return `
-        <div class="result-box">
-          <div class="result-title">查詢結果</div>
+  const record = compatibilityMap[makeKey(selectedDrug1.code, selectedDrug2.code)];
 
-          <div class="pair">
-            <strong>${escapeHtml(d1.brand)}</strong>
-            <span>（${escapeHtml(d1.generic)}｜${escapeHtml(d1.code)}）</span>
-            <br>
-            +
-            <br>
-            <strong>${escapeHtml(d2.brand)}</strong>
-            <span>（${escapeHtml(d2.generic)}｜${escapeHtml(d2.code)}）</span>
-          </div>
+  resultDiv.style.display = "block";
 
-          <div class="badge ${badgeClass}">
-            ${escapeHtml(record.compatible)}
-          </div>
+  if (!record) {
+    resultDiv.innerHTML = renderNoData(selectedDrug1, selectedDrug2);
+    return;
+  }
 
-          <table class="info-table">
-            <tr>
-              <th>Source</th>
-              <td>${escapeHtml(record.source || "Micromedex")}</td>
-            </tr>
-            <tr>
-              <th>UpdatedAt</th>
-              <td>${escapeHtml(record.updatedAt || "未標示")}</td>
-            </tr>
-            <tr>
-              <th>Note</th>
-              <td>${escapeHtml(record.note || "—")}</td>
-            </tr>
-          </table>
-        </div>
-      `;
-    }
+  resultDiv.innerHTML = renderResult(selectedDrug1, selectedDrug2, record);
+}
 
-    function renderNoData(d1, d2) {
-      return `
-        <div class="result-box">
-          <div class="result-title">查無相容性資料</div>
-          <div class="pair">
-            ${escapeHtml(d1.brand)}（${escapeHtml(d1.generic)}）
-            +
-            ${escapeHtml(d2.brand)}（${escapeHtml(d2.generic)}）
-          </div>
-          <div class="badge unknown">無資料</div>
-          <div class="footer-note">
-            建議確認是否為院內尚未建檔組合，或回查 Micromedex / 院內 SOP。
-          </div>
-        </div>
-      `;
-    }
+function renderResult(d1, d2, record) {
+  const badgeClass = getBadgeClass(record.compatible);
 
-    function renderError(message) {
-      return `
-        <div class="result-box">
-          <div class="badge caution">${escapeHtml(message)}</div>
-        </div>
-      `;
-    }
+  return `
+    <div class="result-box">
+      <div class="result-title">查詢結果</div>
 
-    function getBadgeClass(value) {
-      const v = normalizeText(value);
+      <div class="pair">
+        <strong>${escapeHtml(d1.brand)}</strong>
+        <span>（${escapeHtml(d1.generic)}｜${escapeHtml(d1.code)}）</span>
+        <br>+<br>
+        <strong>${escapeHtml(d2.brand)}</strong>
+        <span>（${escapeHtml(d2.generic)}｜${escapeHtml(d2.code)}）</span>
+      </div>
 
-      if (
-        v.includes("compatible") ||
-        v.includes("相容") ||
-        v.includes("yes")
-      ) {
-        return "compatible";
-      }
+      <div class="badge ${badgeClass}">
+        ${escapeHtml(record.compatible)}
+      </div>
 
-      if (
-        v.includes("incompatible") ||
-        v.includes("不相容") ||
-        v.includes("no")
-      ) {
-        return "incompatible";
-      }
+      <table class="info-table">
+        <tr><th>Source</th><td>${escapeHtml(record.source || "Micromedex")}</td></tr>
+        <tr><th>UpdatedAt</th><td>${escapeHtml(record.updatedAt || "未標示")}</td></tr>
+        <tr><th>Note</th><td>${escapeHtml(record.note || "—")}</td></tr>
+      </table>
+    </div>
+  `;
+}
 
-      if (
-        v.includes("caution") ||
-        v.includes("variable") ||
-        v.includes("uncertain") ||
-        v.includes("未測試") ||
-        v.includes("unknown")
-      ) {
-        return "caution";
-      }
+function renderNoData(d1, d2) {
+  return `
+    <div class="result-box">
+      <div class="result-title">查無相容性資料</div>
+      <div class="pair">
+        ${escapeHtml(d1.brand || d1.generic || d1.code)}
+        +
+        ${escapeHtml(d2.brand || d2.generic || d2.code)}
+      </div>
+      <div class="badge unknown">無資料</div>
+      <div class="footer-note">
+        建議確認是否為院內尚未建檔組合，或回查 Micromedex / 院內 SOP。
+      </div>
+    </div>
+  `;
+}
 
-      return "unknown";
-    }
+function renderError(message) {
+  return `
+    <div class="result-box">
+      <div class="badge caution">${escapeHtml(message)}</div>
+    </div>
+  `;
+}
 
-    function resetForm() {
-      selectedDrug1 = null;
-      selectedDrug2 = null;
+function getBadgeClass(value) {
+  const v = normalizeText(value);
 
-      document.getElementById("drugInput1").value = "";
-      document.getElementById("drugInput2").value = "";
-      document.getElementById("suggestions1").style.display = "none";
-      document.getElementById("suggestions2").style.display = "none";
-      document.getElementById("result").style.display = "none";
-    }
+  if (v.includes("incompatible") || v.includes("不相容") || v === "no") {
+    return "incompatible";
+  }
 
-    function escapeHtml(text) {
-      return String(text || "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
+  if (v.includes("compatible") || v.includes("相容") || v === "yes") {
+    return "compatible";
+  }
 
-    setupAutocomplete("drugInput1", "suggestions1", 1);
-    setupAutocomplete("drugInput2", "suggestions2", 2);
-    loadData();
-  </script>
+  if (
+    v.includes("caution") ||
+    v.includes("variable") ||
+    v.includes("uncertain") ||
+    v.includes("未測試") ||
+    v.includes("unknown")
+  ) {
+    return "caution";
+  }
+
+  return "unknown";
+}
+
+function resetForm() {
+  selectedDrug1 = null;
+  selectedDrug2 = null;
+
+  document.getElementById("drugInput1").value = "";
+  document.getElementById("drugInput2").value = "";
+  document.getElementById("suggestions1").style.display = "none";
+  document.getElementById("suggestions2").style.display = "none";
+  document.getElementById("result").style.display = "none";
+}
+
+document.addEventListener("click", function(e) {
+  if (!e.target.closest(".input-wrap")) {
+    document.getElementById("suggestions1").style.display = "none";
+    document.getElementById("suggestions2").style.display = "none";
+  }
+});
+
+setupAutocomplete("drugInput1", "suggestions1", 1);
+setupAutocomplete("drugInput2", "suggestions2", 2);
+loadData();
+</script>
 </body>
 </html>
