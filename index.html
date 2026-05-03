@@ -1,125 +1,689 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <style>
-        body {
-            font-family: Arial;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IV 藥物相容性查詢</title>
 
-        input {
-            width: 200px;
-            margin: 5px;
-        }
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-        button {
-            margin: 10px;
-        }
+  <style>
+    :root {
+      --primary: #0f6b8f;
+      --primary-dark: #084f6a;
+      --bg: #f5f8fa;
+      --card: #ffffff;
+      --border: #d9e2e7;
+      --text: #1f2933;
+      --muted: #6b7280;
+      --success: #0f766e;
+      --danger: #b91c1c;
+      --warning: #92400e;
+      --unknown: #4b5563;
+    }
 
-        .result {
-            margin-top: 20px;
-        }
-    </style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Noto Sans TC", "Segoe UI", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .container {
+      max-width: 980px;
+      margin: 32px auto;
+      padding: 20px;
+    }
+
+    .header {
+      border-left: 6px solid var(--primary);
+      padding-left: 18px;
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      color: var(--primary-dark);
+      letter-spacing: 0.5px;
+    }
+
+    .header p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 107, 143, 0.08);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 700px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--primary-dark);
+    }
+
+    input {
+      width: 100%;
+      padding: 13px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 16px;
+      outline: none;
+      background: #fff;
+    }
+
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(15, 107, 143, 0.15);
+    }
+
+    .suggestions {
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      max-height: 240px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .suggestion-item {
+      padding: 10px 12px;
+      border-bottom: 1px solid #eef2f5;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .suggestion-item:hover {
+      background: #edf7fb;
+    }
+
+    .suggestion-item:last-child {
+      border-bottom: none;
+    }
+
+    .drug-brand {
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .drug-meta {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 2px;
+    }
+
+    .actions {
+      margin-top: 22px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+    }
+
+    .btn-secondary {
+      background: #e5edf1;
+      color: var(--primary-dark);
+    }
+
+    .status {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .result {
+      margin-top: 24px;
+      display: none;
+    }
+
+    .result-box {
+      border-radius: 16px;
+      padding: 22px;
+      border: 1px solid var(--border);
+      background: #fbfdfe;
+    }
+
+    .result-title {
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 12px;
+      color: var(--primary-dark);
+    }
+
+    .pair {
+      font-size: 15px;
+      color: var(--text);
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+
+    .compatible {
+      background: #d1fae5;
+      color: var(--success);
+    }
+
+    .incompatible {
+      background: #fee2e2;
+      color: var(--danger);
+    }
+
+    .caution {
+      background: #fef3c7;
+      color: var(--warning);
+    }
+
+    .unknown {
+      background: #e5e7eb;
+      color: var(--unknown);
+    }
+
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+
+    .info-table th {
+      text-align: left;
+      width: 140px;
+      color: var(--muted);
+      padding: 8px 0;
+      vertical-align: top;
+    }
+
+    .info-table td {
+      padding: 8px 0;
+      color: var(--text);
+    }
+
+    .alert {
+      margin-top: 22px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: #fff7ed;
+      color: #9a3412;
+      border: 1px solid #fed7aa;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+  </style>
 </head>
 
 <body>
+  <div class="container">
+    <div class="header">
+      <h1>IV 藥物相容性查詢</h1>
+      <p>可輸入處置代碼、商品名或成分名。資料來源：Micromedex。</p>
+    </div>
 
-    <h3>IV 藥物相容性查詢</h3>
+    <div class="card">
+      <div class="grid">
+        <div>
+          <label for="drugInput1">藥物 1</label>
+          <input
+            id="drugInput1"
+            type="text"
+            placeholder="例如：digoxin / Lanoxin / 處置代碼"
+            autocomplete="off"
+          />
+          <div id="suggestions1" class="suggestions"></div>
+        </div>
 
-    <input id="drug1" placeholder="輸入藥物1關鍵字">
-    <input id="drug2" placeholder="輸入藥物2關鍵字">
-    <br>
-    <button onclick="search()">查詢</button>
+        <div>
+          <label for="drugInput2">藥物 2</label>
+          <input
+            id="drugInput2"
+            type="text"
+            placeholder="例如：furosemide / Lasix / 處置代碼"
+            autocomplete="off"
+          />
+          <div id="suggestions2" class="suggestions"></div>
+        </div>
+      </div>
 
-    <div class="result" id="result"></div>
+      <div class="actions">
+        <button class="btn-primary" onclick="checkCompatibility()">查詢相容性</button>
+        <button class="btn-secondary" onclick="resetForm()">清除</button>
+      </div>
 
-    <script>
-        const csvUrl = "https://docs.google.com/spreadsheets/d/1D9-wx6Zq-gIEUKi0opvL6FjL_hvrD5HsNkLR-q3kXxc/edit?usp=sharing";
+      <div id="status" class="status">資料載入中...</div>
 
-        let data = [];
-        let drugIndex = [];
-        let compatibilityMap = {};
+      <div id="result" class="result"></div>
 
-        async function loadData() {
-            const res = await fetch(csvUrl + "?v=" + Date.now());
-            const text = await res.text();
-            const rows = text.split("\n").map(r => r.split(","));
+      <div class="alert">
+        本工具僅作為院內藥物相容性快速查詢輔助。若涉及特殊濃度、
+        溶媒、Y-site、TPN、化療藥、血品或高風險藥品，仍應依院內
+        SOP、藥品仿單與最新資料庫確認。
+      </div>
 
-            const headers = rows[0];
-            data = rows.slice(1);
+      <div class="footer-note">
+        資料更新方式：請直接更新 Google Sheet。此工具每次開啟時會重新讀取
+        Sheet 匯出的 CSV。
+      </div>
+    </div>
+  </div>
 
-            buildIndex();
+  <script>
+    const sheetId = "1D9-wx6Zq-gIEUKi0opvL6FjL_hvrD5HsNkLR-q3kXxc";
+
+    /*
+      若你的 Google Sheet 只有一個工作表，通常這個連結可直接使用。
+      若之後有多個 sheet，建議改用 gid 版本。
+    */
+    const csvUrl =
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
+
+    let rawRows = [];
+    let drugIndex = [];
+    let compatibilityMap = {};
+    let selectedDrug1 = null;
+    let selectedDrug2 = null;
+
+    const COL = {
+      code1: "處置代碼1",
+      brand1: "Drug 1 商品名",
+      generic1: "Drug 1 成分名",
+      code2: "處置代碼2",
+      brand2: "Drug 2 商品名",
+      generic2: "Drug 2 成分名",
+      compatible: "Compatible",
+      updatedAt: "UpdatedAt",
+      source: "Source",
+      note: "Note"
+    };
+
+    function normalizeText(value) {
+      return String(value || "")
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, " ");
+    }
+
+    async function loadData() {
+      try {
+        const response = await fetch(csvUrl + "&cacheBust=" + Date.now());
+        const csvText = await response.text();
+
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            rawRows = results.data;
+            buildIndexes(rawRows);
+            document.getElementById("status").textContent =
+              `資料載入完成：${rawRows.length.toLocaleString()} 筆相容性資料`;
+          },
+          error: function(error) {
+            showStatusError("CSV 解析失敗：" + error.message);
+          }
+        });
+      } catch (error) {
+        showStatusError("無法讀取 Google Sheet CSV。請確認 Sheet 已開放檢視權限。");
+        console.error(error);
+      }
+    }
+
+    function showStatusError(message) {
+      document.getElementById("status").textContent = message;
+    }
+
+    function buildIndexes(rows) {
+      const drugMap = new Map();
+      compatibilityMap = {};
+
+      rows.forEach(row => {
+        const d1 = {
+          code: clean(row[COL.code1]),
+          brand: clean(row[COL.brand1]),
+          generic: clean(row[COL.generic1])
+        };
+
+        const d2 = {
+          code: clean(row[COL.code2]),
+          brand: clean(row[COL.brand2]),
+          generic: clean(row[COL.generic2])
+        };
+
+        addDrug(drugMap, d1);
+        addDrug(drugMap, d2);
+
+        if (d1.code && d2.code) {
+          const key1 = makeKey(d1.code, d2.code);
+          const key2 = makeKey(d2.code, d1.code);
+
+          const resultObj = {
+            compatible: clean(row[COL.compatible]) || "無資料",
+            updatedAt: clean(row[COL.updatedAt]) || "",
+            source: clean(row[COL.source]) || "Micromedex",
+            note: clean(row[COL.note]) || ""
+          };
+
+          compatibilityMap[key1] = resultObj;
+          compatibilityMap[key2] = resultObj;
+        }
+      });
+
+      drugIndex = Array.from(drugMap.values());
+    }
+
+    function clean(value) {
+      return String(value || "").trim();
+    }
+
+    function addDrug(map, drug) {
+      if (!drug.code && !drug.brand && !drug.generic) return;
+
+      const key = drug.code || drug.brand || drug.generic;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          ...drug,
+          searchText: normalizeText(
+            `${drug.code} ${drug.brand} ${drug.generic}`
+          )
+        });
+      }
+    }
+
+    function makeKey(codeA, codeB) {
+      return `${clean(codeA)}|${clean(codeB)}`;
+    }
+
+    function searchDrugs(keyword) {
+      const q = normalizeText(keyword);
+      if (!q) return [];
+
+      return drugIndex
+        .map(drug => {
+          let score = 0;
+
+          const code = normalizeText(drug.code);
+          const brand = normalizeText(drug.brand);
+          const generic = normalizeText(drug.generic);
+          const searchText = drug.searchText;
+
+          if (code === q) score += 100;
+          if (brand === q) score += 90;
+          if (generic === q) score += 80;
+
+          if (code.startsWith(q)) score += 60;
+          if (brand.startsWith(q)) score += 50;
+          if (generic.startsWith(q)) score += 45;
+
+          if (searchText.includes(q)) score += 25;
+
+          return { ...drug, score };
+        })
+        .filter(drug => drug.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 8);
+    }
+
+    function setupAutocomplete(inputId, suggestionId, drugNumber) {
+      const input = document.getElementById(inputId);
+      const suggestionBox = document.getElementById(suggestionId);
+
+      input.addEventListener("input", () => {
+        const matches = searchDrugs(input.value);
+
+        if (drugNumber === 1) selectedDrug1 = null;
+        if (drugNumber === 2) selectedDrug2 = null;
+
+        if (matches.length === 0) {
+          suggestionBox.style.display = "none";
+          suggestionBox.innerHTML = "";
+          return;
         }
 
-        function buildIndex() {
-            const drugSet = new Map();
+        suggestionBox.innerHTML = matches
+          .map((drug, index) => `
+            <div class="suggestion-item" onclick="selectDrug(${drugNumber}, ${index})">
+              <div class="drug-brand">${escapeHtml(drug.brand || "未列商品名")}</div>
+              <div class="drug-meta">
+                ${escapeHtml(drug.generic || "未列成分名")}
+                ｜代碼：${escapeHtml(drug.code || "-")}
+              </div>
+            </div>
+          `)
+          .join("");
 
-            data.forEach(r => {
-                const d1 = {
-                    code: r[0],
-                    brand: r[1],
-                    generic: r[2]
-                };
-                const d2 = {
-                    code: r[3],
-                    brand: r[4],
-                    generic: r[5]
-                };
+        suggestionBox.dataset.matches = JSON.stringify(matches);
+        suggestionBox.style.display = "block";
+      });
+    }
 
-                [d1, d2].forEach(d => {
-                    if (!drugSet.has(d.code)) {
-                        drugSet.set(d.code, {
-                            ...d,
-                            searchText: (d.code + " " + d.brand + " " + d.generic).toLowerCase()
-                        });
-                    }
-                });
+    function selectDrug(drugNumber, index) {
+      const suggestionBox = document.getElementById(
+        drugNumber === 1 ? "suggestions1" : "suggestions2"
+      );
 
-                const key = r[0] + "|" + r[3];
-                const key2 = r[3] + "|" + r[0];
+      const matches = JSON.parse(suggestionBox.dataset.matches || "[]");
+      const drug = matches[index];
 
-                compatibilityMap[key] = r[6];
-                compatibilityMap[key2] = r[6];
-            });
+      if (!drug) return;
 
-            drugIndex = Array.from(drugSet.values());
-        }
+      if (drugNumber === 1) {
+        selectedDrug1 = drug;
+        document.getElementById("drugInput1").value =
+          `${drug.brand} (${drug.generic})`;
+        document.getElementById("suggestions1").style.display = "none";
+      } else {
+        selectedDrug2 = drug;
+        document.getElementById("drugInput2").value =
+          `${drug.brand} (${drug.generic})`;
+        document.getElementById("suggestions2").style.display = "none";
+      }
+    }
 
-        function fuzzySearch(keyword) {
-            keyword = keyword.toLowerCase();
-            return drugIndex.filter(d => d.searchText.includes(keyword));
-        }
+    function checkCompatibility() {
+      const resultDiv = document.getElementById("result");
 
-        function pickBestMatch(list) {
-            if (list.length === 0) return null;
-            return list[0]; // MVP先用第一筆
-        }
+      if (!selectedDrug1) {
+        const matches = searchDrugs(document.getElementById("drugInput1").value);
+        selectedDrug1 = matches[0] || null;
+      }
 
-        function search() {
-            const k1 = document.getElementById("drug1").value;
-            const k2 = document.getElementById("drug2").value;
+      if (!selectedDrug2) {
+        const matches = searchDrugs(document.getElementById("drugInput2").value);
+        selectedDrug2 = matches[0] || null;
+      }
 
-            const match1 = pickBestMatch(fuzzySearch(k1));
-            const match2 = pickBestMatch(fuzzySearch(k2));
+      if (!selectedDrug1 || !selectedDrug2) {
+        resultDiv.style.display = "block";
+        resultDiv.innerHTML = renderError("請先從候選清單選擇兩個藥品。");
+        return;
+      }
 
-            if (!match1 || !match2) {
-                document.getElementById("result").innerHTML = "找不到藥品";
-                return;
-            }
+      const key = makeKey(selectedDrug1.code, selectedDrug2.code);
+      const record = compatibilityMap[key];
 
-            const key = match1.code + "|" + match2.code;
-            const result = compatibilityMap[key];
+      if (!record) {
+        resultDiv.style.display = "block";
+        resultDiv.innerHTML = renderNoData(selectedDrug1, selectedDrug2);
+        return;
+      }
 
-            document.getElementById("result").innerHTML = `
-        <b>${match1.brand}</b> + <b>${match2.brand}</b><br>
-        相容性：<b>${result || "無資料"}</b>
-    `;
-        }
+      resultDiv.style.display = "block";
+      resultDiv.innerHTML = renderResult(selectedDrug1, selectedDrug2, record);
+    }
 
-        loadData();
-    </script>
+    function renderResult(d1, d2, record) {
+      const badgeClass = getBadgeClass(record.compatible);
 
+      return `
+        <div class="result-box">
+          <div class="result-title">查詢結果</div>
+
+          <div class="pair">
+            <strong>${escapeHtml(d1.brand)}</strong>
+            <span>（${escapeHtml(d1.generic)}｜${escapeHtml(d1.code)}）</span>
+            <br>
+            +
+            <br>
+            <strong>${escapeHtml(d2.brand)}</strong>
+            <span>（${escapeHtml(d2.generic)}｜${escapeHtml(d2.code)}）</span>
+          </div>
+
+          <div class="badge ${badgeClass}">
+            ${escapeHtml(record.compatible)}
+          </div>
+
+          <table class="info-table">
+            <tr>
+              <th>Source</th>
+              <td>${escapeHtml(record.source || "Micromedex")}</td>
+            </tr>
+            <tr>
+              <th>UpdatedAt</th>
+              <td>${escapeHtml(record.updatedAt || "未標示")}</td>
+            </tr>
+            <tr>
+              <th>Note</th>
+              <td>${escapeHtml(record.note || "—")}</td>
+            </tr>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderNoData(d1, d2) {
+      return `
+        <div class="result-box">
+          <div class="result-title">查無相容性資料</div>
+          <div class="pair">
+            ${escapeHtml(d1.brand)}（${escapeHtml(d1.generic)}）
+            +
+            ${escapeHtml(d2.brand)}（${escapeHtml(d2.generic)}）
+          </div>
+          <div class="badge unknown">無資料</div>
+          <div class="footer-note">
+            建議確認是否為院內尚未建檔組合，或回查 Micromedex / 院內 SOP。
+          </div>
+        </div>
+      `;
+    }
+
+    function renderError(message) {
+      return `
+        <div class="result-box">
+          <div class="badge caution">${escapeHtml(message)}</div>
+        </div>
+      `;
+    }
+
+    function getBadgeClass(value) {
+      const v = normalizeText(value);
+
+      if (
+        v.includes("compatible") ||
+        v.includes("相容") ||
+        v.includes("yes")
+      ) {
+        return "compatible";
+      }
+
+      if (
+        v.includes("incompatible") ||
+        v.includes("不相容") ||
+        v.includes("no")
+      ) {
+        return "incompatible";
+      }
+
+      if (
+        v.includes("caution") ||
+        v.includes("variable") ||
+        v.includes("uncertain") ||
+        v.includes("未測試") ||
+        v.includes("unknown")
+      ) {
+        return "caution";
+      }
+
+      return "unknown";
+    }
+
+    function resetForm() {
+      selectedDrug1 = null;
+      selectedDrug2 = null;
+
+      document.getElementById("drugInput1").value = "";
+      document.getElementById("drugInput2").value = "";
+      document.getElementById("suggestions1").style.display = "none";
+      document.getElementById("suggestions2").style.display = "none";
+      document.getElementById("result").style.display = "none";
+    }
+
+    function escapeHtml(text) {
+      return String(text || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    setupAutocomplete("drugInput1", "suggestions1", 1);
+    setupAutocomplete("drugInput2", "suggestions2", 2);
+    loadData();
+  </script>
 </body>
-
 </html>
