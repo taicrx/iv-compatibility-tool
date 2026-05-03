@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial;
+        }
+
+        input {
+            width: 200px;
+            margin: 5px;
+        }
+
+        button {
+            margin: 10px;
+        }
+
+        .result {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h3>IV 藥物相容性查詢</h3>
+
+    <input id="drug1" placeholder="輸入藥物1關鍵字">
+    <input id="drug2" placeholder="輸入藥物2關鍵字">
+    <br>
+    <button onclick="search()">查詢</button>
+
+    <div class="result" id="result"></div>
+
+    <script>
+        const csvUrl = "https://docs.google.com/spreadsheets/d/1D9-wx6Zq-gIEUKi0opvL6FjL_hvrD5HsNkLR-q3kXxc/edit?usp=sharing";
+
+        let data = [];
+        let drugIndex = [];
+        let compatibilityMap = {};
+
+        async function loadData() {
+            const res = await fetch(csvUrl + "?v=" + Date.now());
+            const text = await res.text();
+            const rows = text.split("\n").map(r => r.split(","));
+
+            const headers = rows[0];
+            data = rows.slice(1);
+
+            buildIndex();
+        }
+
+        function buildIndex() {
+            const drugSet = new Map();
+
+            data.forEach(r => {
+                const d1 = {
+                    code: r[0],
+                    brand: r[1],
+                    generic: r[2]
+                };
+                const d2 = {
+                    code: r[3],
+                    brand: r[4],
+                    generic: r[5]
+                };
+
+                [d1, d2].forEach(d => {
+                    if (!drugSet.has(d.code)) {
+                        drugSet.set(d.code, {
+                            ...d,
+                            searchText: (d.code + " " + d.brand + " " + d.generic).toLowerCase()
+                        });
+                    }
+                });
+
+                const key = r[0] + "|" + r[3];
+                const key2 = r[3] + "|" + r[0];
+
+                compatibilityMap[key] = r[6];
+                compatibilityMap[key2] = r[6];
+            });
+
+            drugIndex = Array.from(drugSet.values());
+        }
+
+        function fuzzySearch(keyword) {
+            keyword = keyword.toLowerCase();
+            return drugIndex.filter(d => d.searchText.includes(keyword));
+        }
+
+        function pickBestMatch(list) {
+            if (list.length === 0) return null;
+            return list[0]; // MVP先用第一筆
+        }
+
+        function search() {
+            const k1 = document.getElementById("drug1").value;
+            const k2 = document.getElementById("drug2").value;
+
+            const match1 = pickBestMatch(fuzzySearch(k1));
+            const match2 = pickBestMatch(fuzzySearch(k2));
+
+            if (!match1 || !match2) {
+                document.getElementById("result").innerHTML = "找不到藥品";
+                return;
+            }
+
+            const key = match1.code + "|" + match2.code;
+            const result = compatibilityMap[key];
+
+            document.getElementById("result").innerHTML = `
+        <b>${match1.brand}</b> + <b>${match2.brand}</b><br>
+        相容性：<b>${result || "無資料"}</b>
+    `;
+        }
+
+        loadData();
+    </script>
+
+</body>
+
+</html>
